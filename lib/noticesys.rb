@@ -10,8 +10,8 @@ module NoticeSys
 
   class Client
 
-    def initialize(user='', rmagick=nil)
-      @user, @rmagick = user, rmagick
+    def initialize(user='', rmagick=nil, debug: false)
+      @user, @rmagick, @debug = user, rmagick, debug
     end
 
     # params expected:  msg, file1, file2, file3
@@ -39,16 +39,21 @@ module NoticeSys
 
         h2 = OgExtractor.new(urls.last).to_h
         
+        puts 'h2: ' + h2.inspect if @debug
+        
         if h2 then
           h = {msg: msg, files: files}   
 
           h[:site]= h2[:url][/https?:\/\/([^\/]+)/,1].sub(/^www\./,'')
 
-          tmpfile = Down.download h2[:img]
-          files2 = scale_img tmpfile.to_path
+          if h2[:img] then
+            tmpfile = Down.download h2[:img]
+            files2 = scale_img tmpfile.to_path
+          end
           
-          h[:files] = files2
-          h[:card] = {h2[:card] => { title: h2[:title], desc: h2[:desc], url: h2[:url]}}
+          h[:files] = files2 || []
+          h[:card] = {h2[:card] => { title: h2[:title], desc: h2[:desc], 
+                                     url: h2[:url]}}
           h[:msg] = msg.sub(urls.last,'')
 
           return "notice/%s/json: %s" % [@user, h.to_json]
