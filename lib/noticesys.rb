@@ -5,8 +5,8 @@
 require 'down'        # file downloader
 require 'weblet'      # HTML retrieval
 require 'dynarex'     # flat file storage system
+require 'unichron'    # universal chron tool (i.e. time calculation)
 require 'ogextractor' # extract metadata
-
 
 
 module NoticeSys
@@ -127,14 +127,74 @@ module NoticeSys
 
   end 
   
+  
+  class CardView
+    
+    def initialize(weblet)
+      
+      @w = weblet
+      
+    end
+    
+    def render(dx, rx, card)
+      
+      card2 = case card.keys.first 
+      when :images
+      
+        card[:images].map.with_index do |img, i|
+        
+          href = [dx.link.sub(/\/$/,''), rx.topic, 'status', rx.id, 
+                  'photo', (i+1).to_s ].join('/')
+          url, align = img[:url], img[:align]
+          "<a href='%s'><div class='top-crop %s'><img class='img1' src='%s'/></div></a>" % [href, align, url]
+          
+        end.join
+        
+      when :summary_large_image
+
+        h2 = card[:summary_large_image]
+
+        rawdesc = h2[:desc]
+
+        desc = rawdesc.length > 147 ? rawdesc[0..147] + '...' : rawdesc
+        site = h2[:url][/https?:\/\/([^\/]+)/,1].sub(/^www\./,'')
+        title = h2[:title]
+        img = h2[:img]
+        url = h2[:url]    
+
+        @w.render('card', binding)
+
+      when :summary
+
+        h2 = card[:summary]
+
+        rawdesc = h2[:desc]
+
+        desc = rawdesc.length > 95 ? rawdesc[0..95] + '...' : rawdesc
+        site = h2[:url][/https?:\/\/([^\/]+)/,1].sub(/^www\./,'')
+        title = h2[:title].length > 46 ? h2[:title][0..46] + '...' :  h2[:title]
+        img = h2[:img]
+        url = h2[:url]
+        
+        img_element = if img then 
+          "<img src='#{img}'>"
+        else
+          @w.render('svg/article')
+        end
+
+        @w.render('card2', binding)    
+      
+      end
+    end    
+  end
+  
   class StatusView
     
-    def initialize(basepath, xslfile, css_url, weblet_file=nil)
+    def initialize(basepath, xslfile, css_url, weblet_file)
       
       @basepath, @xslfile, @css_url = basepath, xslfile, css_url
-      weblet_file ||= File.join(File.dirname(__FILE__), '..', 
-                                'data', 'microblog.txt')
       @w = Weblet.new(weblet_file, binding)      
+      @card = CardView.new(@w)
       
     end
     
@@ -190,7 +250,7 @@ module NoticeSys
           #img = h[:img].sub(/small(?=\.\w+$)/,'large')
           img = h[:img]
           metadata = @w.render(:meta, binding)
-          [render_card(dx, rx, card), metadata]
+          [@card.render(dx, rx, card), metadata]
           
         end
       else
@@ -215,58 +275,66 @@ module NoticeSys
 
     end
     
-    private
+  end
+  
+  class StatusListView
     
-    def render_card(dx, rx, card)
+    def initialize(basepath, css_url, weblet_file, static_urlbase)
       
-      card2 = case card.keys.first 
-      when :images
+      @basepath, @css_url, @static_urlbase = basepath,  css_url, static_urlbase
+      @w = Weblet.new(weblet_file, binding)      
+      @card = CardView.new(@w)
       
-        card[:images].map.with_index do |img, i|
+    end
+    
+    def render(username)      
+
+      s = ''
+      
+      dx = Dynarex.new(File.join(@basepath, username, 'feed.xml'))
+      
+      s += @w.render 'user/ptop', binding
+      
+      notices = dx.all.map do |rx|
+      
+        card2 = ''
+        rawcard = rx.to_h[:card]                
         
-          href = [dx.link.sub(/\/$/,''), rx.topic, 'status', rx.id, 
-                  'photo', (i+1).to_s ].join('/')
-          url, align = img[:url], img[:align]
-          "<a href='%s'><div class='top-crop %s'><img class='img1' src='%s'/></div></a>" % [href, align, url]
+        card2 = if rawcard and rawcard.length > 10 then
+        
+          card = JSON.parse(rawcard, symbolize_names: true)             
           
-        end.join
-        
-      when :summary_large_image
-
-        h2 = card[:summary_large_image]
-
-        rawdesc = h2[:desc]
-
-        desc = rawdesc.length > 147 ? rawdesc[0..147] + '...' : rawdesc
-        site = h2[:url][/https?:\/\/([^\/]+)/,1].sub(/^www\./,'')
-        title = h2[:title]
-        img = h2[:img]
-        url = h2[:url]    
-
-        @w.render('card', binding)
-
-      when :summary
-
-        h2 = card[:summary]
-
-        rawdesc = h2[:desc]
-
-        desc = rawdesc.length > 95 ? rawdesc[0..95] + '...' : rawdesc
-        site = h2[:url][/https?:\/\/([^\/]+)/,1].sub(/^www\./,'')
-        title = h2[:title].length > 46 ? h2[:title][0..46] + '...' :  h2[:title]
-        img = h2[:img]
-        url = h2[:url]
-        
-        img_element = if img then 
-          "<img src='#{img}'>"
+          if card.is_a? Hash then            
+            @card.render(dx, rx, card)
+          end
+          
         else
-          @w.render('svg/article')
+          ''
+        end      
+      
+        t2 = Time.at rx.id.to_s[0..9].to_i
+        relative_time = Unichron.new(t2).elapsed
+        
+        d = t2.strftime("%I:%M%p %b %d %Y")
+        
+        description = if rx.description.length > 1 then
+          doc = Rexle.new "<node>%s</node>" % rx.description.gsub(/<\/?p>/,'')                    
+          doc.root.xpath('img|div').each(&:delete)
+          "<p>%s</p>" % doc.root.xml
+        else
+          ''
         end
 
-        @w.render('card2', binding)    
-      
+        @w.render :notice, binding
+        
       end
-    end    
+
+      s += notices.join      
+      s += @w.render 'user/rsslink', binding                  
+      @w.render :user, binding
+      
+    end
+    
   end
     
 end 
