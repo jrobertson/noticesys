@@ -38,6 +38,28 @@
   </a>
   </div>
 
+%search_pg
+
+        <html>
+          <head>
+            <title>##{q} - Microblog Search</title>
+            <meta charset='UTF-8'/>
+            <meta name='viewport' content='width=device-width, initial-scale=1'>
+            <link rel='stylesheet' type='text/css' href='#{@css_url}'/>
+
+          </head>
+          <body>
+          <header>
+          
+            #{back}
+            <form action='/search' method='get'>
+              <input type='text' name='q' id='q' placeholder='search notices' value='##{q}'/>
+              <input type='submit' value='search'/>
+            </form>
+          </header>
+          #{s}
+          </body>
+      </html>
 
 %meta
         <meta name="twitter:card" content="#{type}"/>
@@ -51,19 +73,19 @@
 
         <div class='notice'>
           <div id='avatar' class='profile'>
-            <a href="/#{rx.topic}"><img src='#{dx.image}'/></a>
+            <a href="/#{rx.topic}"><img src='#{uimage}'/></a>
             <div id='ucard'>
               <div>
-                <img src='#{dx.image}'/>
+                <img src='#{uimage}'/>
               </div>
-              <a href="/#{rx.topic}"><span class='title'>#{dx.title}</span></a>
-              <span class='username'>@#{username}</span>
-              <p>#{dx.bio}</p>
+              <a href="/#{rx.topic}"><span class='title'>#{utitle}</span></a>
+              <span class='username'>@#{rx.topic}</span>
+              <p>#{ubio}</p>
               
             </div>            
           </div>
           <div class='ncol2'>
-            <div class='user'><a href="#{rx.topic}"><span>#{dx.title}</span></a> @#{rx.topic} &middot; <a href="#{rx.link}" title="#{d}">#{relative_time
+            <div class='user'><a href="#{rx.topic}"><span>#{utitle}</span></a> @#{rx.topic} &middot; <a href="#{rx.link}" title="#{d}">#{relative_time
             }</a><:svg/ellipsis>
             </div>
             
