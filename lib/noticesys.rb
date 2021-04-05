@@ -7,7 +7,17 @@ require 'weblet'      # HTML retrieval
 require 'dynarex'     # flat file storage system
 require 'unichron'    # universal chron tool (i.e. time calculation)
 require 'ogextractor' # extract metadata
+require 'recordx_sqlite'
 
+
+# classes:
+#
+#   Client - sends the msg to the messaging broker
+#   StatusView - renders the HTML for a user status
+#   StatusListView - renders the HTML for a user timeline
+#   CardView - renders the HTML for a card; used within a status
+#   HashtagQueryView - renders the HTML for the results for a hashtag search
+#   SearchQueryView - renders the HTML for the results for a keyword search
 
 module NoticeSys
 
@@ -190,10 +200,10 @@ module NoticeSys
   
   class StatusView
     
-    def initialize(basepath, xslfile, css_url, weblet_file)
+    def initialize(basepath, xslfile, css_url, weblet)
       
       @basepath, @xslfile, @css_url = basepath, xslfile, css_url
-      @w = Weblet.new(weblet_file, binding)      
+      @w = weblet    
       @card = CardView.new(@w)
       
     end
@@ -202,7 +212,7 @@ module NoticeSys
 
       id = rawid[0..9].to_i
       
-      filepath = File.join(@basepath, topic)
+      filepath = File.join(@basepath, 'u', topic)
       a = [Time.at(id).strftime("%Y/%b/%-d").downcase, rawid]
       xmlfile = File.join(filepath, "%s/%s/index.xml" % a)
       xslfile = File.join(@basepath, "/xsl/notices/#{topic}.xsl")
@@ -277,12 +287,20 @@ module NoticeSys
     
   end
   
+  class NoticeView
+    
+    def render()
+    end
+    
+  end
+
+  
   class StatusListView
     
-    def initialize(basepath, css_url, weblet_file, static_urlbase)
+    def initialize(basepath, css_url, static_urlbase, weblet)
       
       @basepath, @css_url, @static_urlbase = basepath,  css_url, static_urlbase
-      @w = Weblet.new(weblet_file, binding)      
+      @w = weblet
       @card = CardView.new(@w)
       
     end
@@ -291,7 +309,7 @@ module NoticeSys
 
       s = ''
       
-      dx = Dynarex.new(File.join(@basepath, username, 'feed.xml'))
+      dx = Dynarex.new(File.join(@basepath, 'u', username, 'feed.xml'))
       
       s += @w.render 'user/ptop', binding
       
@@ -325,6 +343,7 @@ module NoticeSys
           ''
         end
 
+        utitle, uimage, ubio = dx.title, dx.image, dx.bio
         @w.render :notice, binding
         
       end
@@ -334,6 +353,247 @@ module NoticeSys
       @w.render :user, binding
       
     end
+  end
+    
+  class HashtagQueryView
+    
+    def initialize(basepath, css_url, weblet, static_urlbase, urlbase)
+      
+      @basepath, @css_url, @static_urlbase = basepath,  css_url, static_urlbase
+      @w, @urlbase = weblet, urlbase
+      @card = CardView.new(@w)
+      
+    end
+    
+    def render(q, referer)      
+      #q = args.first    
+      dbpath = File.join(@basepath, '/hashtag/index.db')
+      db = RecordxSqlite.new(dbpath, table: 'hashtags')
+   
+      
+      a = db.find_all_by_tag q
+
+      topics = a.map(&:topic).uniq.map do |topic|  
+
+        topicpath = File.join(@basepath, 'u', topic)
+        filepath = File.join(topicpath, "notices.db")
+        db = RecordxSqlite.new(filepath, table: 'notices')
+
+        dx = Dynarex.new(File.join(topicpath, 'feed.xml'))
+        [topic, OpenStruct.new(title: dx.title, image: dx.image, db: db)]
+
+      end.to_h
+
+
+      rows = a.map do |x|
+
+        r = topics[x.topic]
+        rx = r.db.find x.noticeid
+        link = "%s/%s/status/%s" % [@urlbase, x.topic, x.noticeid]
+        OpenStruct.new(rx.to_h.merge({topic: x.topic, title: r.title, 
+                                      image: r.image, bio: r.bio, link: link}))
+
+      end
+      
+      
+      s = ''
+      
+      notices = rows.sort_by {|x| -(x.id.to_i)}.take(20).map do |rx|
+      
+        next unless rx.description
+                
+        card2 = ''
+        rawcard = rx.to_h[:card]                
+        
+        card2 = if rawcard and rawcard.length > 10 then
+        
+          card = JSON.parse(rawcard, symbolize_names: true)             
+          
+          if card.is_a? Hash then            
+            @card.render(dx, rx, card)
+          end
+          
+        else
+          ''
+        end   
+        
+        t2 = Time.at rx.id.to_s[0..9].to_i
+        relative_time = Unichron.new(t2).elapsed
+        
+        d = t2.strftime("%I:%M%p %b %d %Y")
+        
+        description = if rx.description.length > 1 then
+          doc = Rexle.new "<node>%s</node>" % rx.description.gsub(/<\/?p>/,'')                    
+          doc.root.xpath('img|div').each(&:delete)
+          "<p>%s</p>" % doc.root.xml
+        else
+          ''
+        end        
+
+        utitle, uimage, ubio = rx.title, rx.image, rx.bio
+        @w.render :notice, binding
+        
+      end    
+      
+      s += if notices.any? then
+        notices.compact.join      
+      else
+        "<p>No results for #{q}</p>"
+      end
+      
+      ref = referer
+      ref = '../' if ref =~ /(?:status|hashtag)\/\d+/      
+      
+      svg = @w.render 'svg/backarrow', binding
+      back = ref ? "<a href='#{ref}'>#{svg}</a>" : ''
+            
+      @w.render :search_pg, binding
+      
+    end
+    
+    
+  end
+  
+  class SearchQueryView
+    
+    def initialize(basepath, css_url, weblet, static_urlbase, urlbase)
+      
+      @basepath, @css_url, @static_urlbase = basepath,  css_url, static_urlbase
+      @w, @urlbase = weblet, urlbase
+      @card = CardView.new(@w)
+      
+    end
+    
+    def render(q, referer)      
+      
+
+      users = Dir.glob(File.join(@basepath, 'u', '*')).map do |x|
+        File.basename(x)
+      end
+
+      topics = users.map do |topic|  
+
+        topicpath = File.join(@basepath, 'u', topic)
+        filepath = File.join(topicpath, "notices.db")
+        db = RecordxSqlite.new(filepath, table: 'notices')
+
+        dx = Dynarex.new(File.join(topicpath, 'feed.xml'))
+        [topic, OpenStruct.new(title: dx.title, image: dx.image, bio: dx.bio, db: db)]
+
+      end.to_h
+
+      #return topics.inspect
+      rows = topics.flat_map do |topic, r|
+
+        a = r.db.all.select {|x| x.description =~ /#{q}/i}
+        a.map do |rx|
+          link = "%s/%s/status/%s" % [@urlbase, topic, rx.noticeid]
+          OpenStruct.new(rx.to_h.merge({topic: topic, title: r.title, image: r.image, link: link}))
+        end
+
+      end
+      
+      
+      #return rows.inspect      
+      s = ''
+      
+      notices = rows.sort_by {|x| -(x.id.to_i)}.take(20).map do |rx|
+      
+        
+        card2 = ''
+        rawcard = rx.to_h[:card]                
+        
+        card2 = if rawcard and rawcard.length > 10 then
+        
+          card = JSON.parse(rawcard, symbolize_names: true)             
+          
+          if card.is_a? Hash then            
+            @card.render(dx, rx, card)
+          end
+          
+        else
+          ''
+        end   
+        
+        #rx.description
+        t2 = Time.at rx.id.to_s[0..9].to_i
+        relative_time = Unichron.new(t2).elapsed
+        
+        d = t2.strftime("%I:%M%p %b %d %Y")
+        
+        #desc = rx.description.gsub(/<\/?p>/,'').gsub('&lt;','<').gsub('&gt;','>')
+        
+        topic = rx.topic
+        title, image, bio = %i(title image bio).map do |x|
+          topics[topic].method(x).call
+        end
+        
+        description = if rx.description.length > 1 then
+          doc = Rexle.new "<node>%s</node>" % rx.description.gsub(/<\/?p>/,'')                    
+          doc.root.xpath('img|div').each(&:delete)
+          "<p>%s</p>" % doc.root.xml
+        else
+          ''
+        end            
+                
+        utitle, uimage, ubio = title, image, bio
+        @w.render :notice, binding
+
+
+      end
+      #return notices.inspect
+      
+      s += if notices.any? then
+        notices.join      
+      else
+        "<p>No results for #{q}</p>"
+      end
+      
+      #ref =  @env["HTTP_REFERER"]
+      ref = referer
+      ref = '../' if ref =~ /(?:status\/\d+|search)/
+      svg = @w.render 'svg/backarrow', binding
+      back = ref ? "<a href='#{ref}'>#{svg}</a>" : ''      
+      
+      @w.render :search_pg, binding
+      
+      
+    end
+    
+    
+  end  
+  
+  class Main
+    
+    def initialize(basepath, xslfile, statuscss_url, statuslistcss_url, 
+                   weblet_file, static_urlbase, urlbase)
+      
+      weblet = Weblet.new(weblet_file)      
+      @status = StatusView.new(basepath, xslfile, statuscss_url, weblet)
+      @statuslist = StatusListView.new(basepath, statuslistcss_url, 
+                                       static_urlbase, weblet)
+      @hashtag = HashtagQueryView.new(basepath, statuslistcss_url, weblet, 
+                                      static_urlbase, urlbase)
+      @search = SearchQueryView.new(basepath, statuslistcss_url, weblet, 
+                                      static_urlbase, urlbase)
+      
+    end
+    
+    def status(topic, rawid, referer)
+      @status.render topic, rawid, referer
+    end
+    
+    def status_list(username)
+      @statuslist.render username
+    end
+
+    def hashtag_query(s, referer)
+      @hashtag.render s, referer
+    end
+    
+    def search_query(s, referer)
+      @search.render s, referer
+    end    
     
   end
     
