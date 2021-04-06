@@ -1,9 +1,9 @@
 Gem::Specification.new do |s|
   s.name = 'noticesys'
-  s.version = '0.4.1'
+  s.version = '0.5.0'
   s.summary = 'A small part of an experimental microblogging system.'
   s.authors = ['James Robertson']
-  s.files = Dir['lib/noticesys.rb', 'data/microblog.txt']
+  s.files = Dir['lib/noticesys.rb', 'data/microblog.txt','data/css.txt']
   s.add_runtime_dependency('down', '~> 5.2', '>=5.2.0')
   s.add_runtime_dependency('weblet', '~> 0.3', '>=0.3.3')
   s.add_runtime_dependency('dynarex', '~> 1.8', '>=1.8.27')

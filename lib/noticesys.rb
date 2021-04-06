@@ -18,6 +18,7 @@ require 'recordx_sqlite'
 #   CardView - renders the HTML for a card; used within a status
 #   HashtagQueryView - renders the HTML for the results for a hashtag search
 #   SearchQueryView - renders the HTML for the results for a keyword search
+#   CssView - outputs the default CSS used by the microblog
 
 module NoticeSys
 
@@ -286,6 +287,42 @@ module NoticeSys
     end
     
   end
+    
+  class CssView
+    
+    def initialize(weblet_file)
+      
+      @weblet_file = weblet_file
+      
+    end
+    
+    def noticelist_css()
+      
+      w = Weblet.new(@weblet_file)
+
+      lines = []
+      lines << w.render(:main)
+      lines << w.render('main/user')
+      lines << w.render(:notice)
+      lines << w.render('notice/cards')
+      lines << w.render('main/noticelist')
+      lines << w.render('main/footer')
+      lines.join("\n")
+      
+    end
+    
+    def notice_css()
+      
+      w = Weblet.new(@weblet_file)
+
+      lines = []
+      lines << w.render(:status)
+      lines << w.render(:cards)
+      lines.join("\n")
+      
+    end    
+    
+  end  
   
   class NoticeView
     
@@ -566,7 +603,7 @@ module NoticeSys
   class Main
     
     def initialize(basepath, xslfile, statuscss_url, statuslistcss_url, 
-                   weblet_file, static_urlbase, urlbase)
+                   weblet_file, static_urlbase, urlbase, weblet_cssfile)
       
       weblet = Weblet.new(weblet_file)      
       @status = StatusView.new(basepath, xslfile, statuscss_url, weblet)
@@ -577,6 +614,16 @@ module NoticeSys
       @search = SearchQueryView.new(basepath, statuslistcss_url, weblet, 
                                       static_urlbase, urlbase)
       
+      @css = CssView.new(weblet_cssfile)
+      
+    end
+    
+    def notice_css()
+      @css.notice_css()
+    end
+    
+    def noticelist_css()
+      @css.noticelist_css()
     end
     
     def status(topic, rawid, referer)
@@ -593,7 +640,9 @@ module NoticeSys
     
     def search_query(s, referer)
       @search.render s, referer
-    end    
+    end
+
+    
     
   end
     
