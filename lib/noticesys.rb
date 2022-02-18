@@ -224,7 +224,9 @@ module NoticeSys
       end
 
       dx = Dynarex.new(File.join(filepath, 'feed.xml'))
-      doc = Rexle.new(FileX.read(xmlfile))
+      s = FileX.read(xmlfile)
+
+      doc = Rexle.new(s.force_encoding("UTF-8"))
 
       doc.root.element('summary/title').text = dx.title
       e = doc.root.element('summary/image')
