@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name = 'noticesys'
-  s.version = '0.6.0'
+  s.version = '0.6.1'
   s.summary = 'A small part of an experimental microblogging system.'
   s.authors = ['James Robertson']
   s.files = Dir['lib/noticesys.rb', 'data/microblog.txt','data/css.txt']

@@ -202,7 +202,7 @@ module NoticeSys
   end
 
   class StatusView
-    include RXFReader
+    include RXFRead
 
     def initialize(basepath, xslfile, css_url, weblet)
 
