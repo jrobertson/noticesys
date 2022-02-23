@@ -8,6 +8,7 @@ require 'dynarex'     # flat file storage system
 require 'unichron'    # universal chron tool (i.e. time calculation)
 require 'ogextractor' # extract metadata
 require 'recordx_sqlite'
+require 'rxfileio'
 
 
 # classes:
@@ -23,6 +24,7 @@ require 'recordx_sqlite'
 module NoticeSys
 
   class Client
+    include RXFileIOModule
 
     def initialize(user='', rmagick=nil, debug: false)
       @user, @rmagick, @debug = user, rmagick, debug
@@ -91,7 +93,7 @@ module NoticeSys
       else
 
         neworiginal = raworiginal + '.jpg'
-        FileUtils.mv raworiginal, neworiginal
+        FileX.mv raworiginal, neworiginal
         neworiginal
 
       end
@@ -111,7 +113,7 @@ module NoticeSys
 
           f2 = f.sub(/_(n\d+x\d+)\.\w+$/) {|x| x.sub($1, label)}
 
-          FileUtils.mv f, f2
+          FileX.mv f, f2
           oldfile = f2
 
         elsif oldfile
@@ -120,7 +122,7 @@ module NoticeSys
 
           oldfile = original if i == a.length - 1
 
-          FileUtils.cp oldfile, f2
+          FileX.cp oldfile, f2
 
         end
 
@@ -130,7 +132,7 @@ module NoticeSys
       end
 
       imgfile = original.sub(/\.\w+$/,'2\0')
-      FileUtils.mv original, imgfile
+      FileX.mv original, imgfile
 
       file_sizes << imgfile
 
@@ -200,7 +202,7 @@ module NoticeSys
   end
 
   class StatusView
-    include RXFHelperModule
+    include RXFReader
 
     def initialize(basepath, xslfile, css_url, weblet)
 
@@ -219,7 +221,7 @@ module NoticeSys
       xmlfile = File.join(filepath, "%s/%s/index.xml" % a)
       xslfile = File.join(@basepath, "/xsl/notices/#{topic}.xsl")
 
-      unless File.exists? xslfile then
+      unless FileX.exists? xslfile then
         xslfile = @xslfile
       end
 
